@@ -1,0 +1,35 @@
+name: Minikube CI
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Start Minikube
+      uses: medyagh/setup-minikube@latest
+
+    - name: Build Docker Image in Minikube
+      run: |
+        minikube image build -t local/flask-app:v1 .
+
+    - name: Deploy to Minikube
+      run: |
+        kubectl apply -f deploy/k8s.yaml
+
+    - name: Wait for Pod to be Ready
+      run: |
+        for i in {1..10}; do
+          POD=$(kubectl get pods -l app=flask-app -o name)
+          if [ ! -z "$POD" ]; then echo "Pod found: $POD"; break; fi
+          echo "Waiting for pod... ($i)"
+          sleep 5
+        done
+        kubectl wait --for=condition=ready pod -l app=flask-app --timeout=120s
+
+    - name: Get Service URL
+      run: |
+        minikube service flask-service --url
